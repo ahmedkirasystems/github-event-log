@@ -1,37 +1,64 @@
 ---
-name: Revewiers based on labels
+name: Reviewers based on labels
 
 on:
   pull_request:
     branches:
-      - "master"
+      - "main"
     types:
-      - opened
-      - synchronize
-      - reopened
-      - edited
+      # - opened
+      # - synchronize
+      # - reopened
+      # - edited
+      - labeled
+      # - unlabeled
+  pull_request_review:
+    types:
+      - submitted
+
+# Limiting token permission to PR only
+permissions:
+    pull-requests: write
+    actions: none
+    checks: none
+    contents: none
+    deployments: none
+    issues: none
+    packages: none
+    repository-projects: none
+    security-events: none
+    statuses: none
 
 jobs:
-  devops-enforce:
+  assignreviewers:
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'DevOps')
+    # Check if
+    # pull request isn't a draft
+    # and
+    # required label is present
+    if: ${{ !github.event.pull_request.draft }} && contains(github.event.pull_request.labels.*.name, 'DevOps')
     steps:
-      - name: Assign DevOps Team
+      - name: Assign Team
+        # Check if team isn't already assigned
+        if: ${{ !contains(github.event.pull_request.requested_teams.*.slug, 'devops') }}
         uses: actions/github-script@v5
         with:
           script: |
-            let pull_request = context.payload.pull_requests
-            console.log(pull_request.requested_teams.find(item => slug == 'devops'))
-            // if (context.payload.pull_request.requested_teams.*.slug == 'DevOps') {
-            //    console.log(context.payload.pull_request.requested_teams.*.slug)
-            // }
             // Check if team isn't already assigned
-            // github.rest.issues.createComment({
-            //   issue_number: context.issue.number,
-            //   owner: context.repo.owner,
-            //   repo: context.repo.repo,
-            //   body: reviewers 
-            // })
+            console.log("Ensuring that relevant teams have been assigned")
+            console.log(context)
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "Adding DevOps Team as reviewers"
+            })
+            github.rest.pulls.createReviewRequest({
+              pull_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              reviewers: 'devops'
+            })
             // if (context.payload.pull_request.requested_reviewers.length > 0) {
             //   console.log(context.payload.pull_request.requested_reviewers)
             //   console.log(context.payload.pull_request.requested_reviewers.toString())
@@ -40,17 +67,18 @@ jobs:
             //     issue_number: context.issue.number,
             //     owner: context.repo.owner,
             //     repo: context.repo.repo,
-            //     body: reviewers 
+            //     body: reviewers
             //   })
             // }
-            // if (context.payload.pull_request.requested_teams.length > 0) {
-            //   console.log(context.payload.pull_request.requested_teams)
-            //   console.log(context.payload.pull_request.requested_teams.toString())
-            //   let requested_teams = context.payload.pull_request.requested_teams.toString()
-            //   github.rest.issues.createComment({
-            //     issue_number: context.issue.number,
-            //     owner: context.repo.owner,
-            //     repo: context.repo.repo,
-            //     body: requested_teams 
-            //   })
-            // }
+      - name: Check if approval has been provided
+        if: github.event.review.state == 'approved'
+        uses: actions/github-script@v5
+        with:
+          script: |
+            console.log("Ensuring that approvals have been provided")
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "Failing since approval hasn't been provided by relevant team(s)"
+            })
