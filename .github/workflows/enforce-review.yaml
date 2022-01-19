@@ -1,0 +1,56 @@
+---
+name: Revewiers based on labels
+
+on:
+  pull_request:
+    branches:
+      - "master"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - edited
+
+jobs:
+  devops-enforce:
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'DevOps')
+    steps:
+      - name: Assign DevOps Team
+        uses: actions/github-script@v5
+        with:
+          script: |
+            let pull_request = context.payload.pull_requests
+            console.log(pull_request.requested_teams.find(item => slug == 'devops'))
+            // if (context.payload.pull_request.requested_teams.*.slug == 'DevOps') {
+            //    console.log(context.payload.pull_request.requested_teams.*.slug)
+            // }
+            // Check if team isn't already assigned
+            // github.rest.issues.createComment({
+            //   issue_number: context.issue.number,
+            //   owner: context.repo.owner,
+            //   repo: context.repo.repo,
+            //   body: reviewers 
+            // })
+            // if (context.payload.pull_request.requested_reviewers.length > 0) {
+            //   console.log(context.payload.pull_request.requested_reviewers)
+            //   console.log(context.payload.pull_request.requested_reviewers.toString())
+            //   let reviewers = context.payload.pull_request.requested_reviewers.toString()
+            //   github.rest.issues.createComment({
+            //     issue_number: context.issue.number,
+            //     owner: context.repo.owner,
+            //     repo: context.repo.repo,
+            //     body: reviewers 
+            //   })
+            // }
+            // if (context.payload.pull_request.requested_teams.length > 0) {
+            //   console.log(context.payload.pull_request.requested_teams)
+            //   console.log(context.payload.pull_request.requested_teams.toString())
+            //   let requested_teams = context.payload.pull_request.requested_teams.toString()
+            //   github.rest.issues.createComment({
+            //     issue_number: context.issue.number,
+            //     owner: context.repo.owner,
+            //     repo: context.repo.repo,
+            //     body: requested_teams 
+            //   })
+            // }
