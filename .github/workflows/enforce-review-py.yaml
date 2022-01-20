@@ -1,0 +1,152 @@
+---
+name: Testing
+
+on:
+  pull_request:
+    branches:
+      - "main"
+    types:
+      - "labeled"
+      - "synchronize"
+      - "ready_for_review"
+  pull_request_review:
+    types:
+      - "submitted"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      pr_is_draft: ${{ steps.draft.outputs.draft }}
+      pr_label_set: ${{ steps.label.outputs.label }}
+      pr_is_assigned: ${{ steps.assigned.outputs.assigned }}
+      pr_is_approved: ${{ steps.approved.outputs.approved }}
+    steps:
+      - name: Set PR Draft
+        id: draft
+        run: |
+          if ${{ github.event.pull_request.draft }}; then
+            echo "::set-output name=draft::true"
+          else
+            echo "::set-output name=draft::false"
+          fi
+
+      - name: Set PR LABEL SET
+        id: label
+        run: |
+          if ${{ contains(github.event.pull_request.labels.*.name, 'DevOps') }}; then
+            echo "::set-output name=label::true"
+          else
+            echo "::set-output name=label::false"
+          fi
+
+      - name: Set PR IS ASSIGNED
+        id: assigned
+        run: |
+          if ${{ contains(github.event.pull_request.requested_reviewers.*.name, 'ahmedsajid') }}; then
+            echo "::set-output name=assigned::true"
+          else
+            echo "::set-output name=assigned::false"
+          fi
+
+      - name: Set PR IS APPROVED
+        id: approved
+        run: |
+          if ${{ github.event.review.state == 'approved' }}; then
+            echo "::set-output name=approved::true"
+          else
+            echo "::set-output name=approved::false"
+          fi
+
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: Dump job context
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        run: echo "$JOB_CONTEXT"
+      - name: Dump steps context
+        env:
+          STEPS_CONTEXT: ${{ toJson(steps) }}
+        run: echo "$STEPS_CONTEXT"
+      - name: Dump runner context
+        env:
+          RUNNER_CONTEXT: ${{ toJson(runner) }}
+        run: echo "$RUNNER_CONTEXT"
+      - name: Dump strategy context
+        env:
+          STRATEGY_CONTEXT: ${{ toJson(strategy) }}
+        run: echo "$STRATEGY_CONTEXT"
+      - name: Dump matrix context
+        env:
+          MATRIX_CONTEXT: ${{ toJson(matrix) }}
+        run: echo "$MATRIX_CONTEXT"
+      - name: print event
+        run: echo "${{ github.event  }}"
+      - name: print event name
+        run: echo "${{ github.event_name  }}"
+      - name: print label name
+        run: echo "${{ github.event.label.name }}"
+
+  assignteam:
+    needs: setup
+    runs-on: ubuntu-latest
+    # Check if
+    # pull request isn't a draft
+    # and
+    # required label is present
+    # and
+    # requested team isn't already assigned
+    # and
+    # if the event is pull_request
+    # and
+    # label added is 'DevOps' one
+    if: |
+      contains(needs.setup.outputs.pr_is_draft, 'false') &&
+      contains(needs.setup.outputs.pr_label_set, 'true') &&
+      contains(needs.setup.outputs.pr_is_assigned, 'false') &&
+      github.event_name == 'pull_request' &&
+      (github.event.label.name == 'DevOps' ||
+       github.event.action == 'synchronize' ||
+       github.event.action == 'ready_for_review')
+    steps:
+      - name: Checking out repo
+        uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+      - name: Install requirements
+        run: pip install -r .github/workflows/robot/requirements.txt
+      - name: Run Assign
+        run: python .github/workflows/robot/assign.py
+        env:
+          GITHUB_TOKEN: "${{ secrets.REVIEW_ENFORCEMENT_TOKEN }}"
+          REVIEWER: "ahmedsajid"
+
+  enforcereviews:
+    needs: setup
+    runs-on: ubuntu-latest
+    # Check if PR is reviewed
+    if: |
+      contains(needs.setup.outputs.pr_is_draft, 'false') &&
+      contains(needs.setup.outputs.pr_is_approved, 'true') &&
+      github.event_name == 'pull_request_review'
+    steps:
+      - name: Checking out repo
+        if: ${{ contains(needs.setup.outputs.pr_label_set, 'true') }}
+        uses: actions/checkout@v2
+      - name: Setup Python
+        if: ${{ contains(needs.setup.outputs.pr_label_set, 'true') }}
+        uses: actions/setup-python@v2
+      - name: Install requirements
+        if: ${{ contains(needs.setup.outputs.pr_label_set, 'true') }}
+        run: pip install -r .github/workflows/robot/requirements.txt
+      - name: Run Assign
+        if: ${{ contains(needs.setup.outputs.pr_label_set, 'true') }}
+        run: python .github/workflows/robot/checkreviews.py
+        env:
+          GITHUB_TOKEN: "${{ secrets.REVIEW_ENFORCEMENT_TOKEN }}"
+          REVIEWER: "ahmedsajid"
+      - name: If label not set, nothing to do
+        if: ${{ contains(needs.setup.outputs.pr_label_set, 'false') }}
+        run: echo "Nothing to do"
